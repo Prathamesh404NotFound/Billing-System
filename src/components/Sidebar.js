@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, FileText, Package, Settings, Plus } from 'lucide-react';
+import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors } from 'lucide-react';
 export default function Sidebar() {
     const [location] = useLocation();
     const navItems = [
@@ -8,6 +8,8 @@ export default function Sidebar() {
         { label: 'Make Bill', href: '/make-bill', icon: _jsx(Plus, { size: 20 }), highlight: true },
         { label: 'View Bills', href: '/view-bills', icon: _jsx(FileText, { size: 20 }) },
         { label: 'Items', href: '/items', icon: _jsx(Package, { size: 20 }) },
+        { label: 'Categories', href: '/categories', icon: _jsx(Tags, { size: 20 }) },
+        { label: 'Alterations', href: '/alterations', icon: _jsx(Scissors, { size: 20 }) },
         { label: 'Settings', href: '/settings', icon: _jsx(Settings, { size: 20 }) },
     ];
     return (_jsxs("aside", { className: "hidden md:flex flex-col w-64 bg-slate-900 text-white h-screen sticky top-0 border-r border-slate-800", children: [_jsx("div", { className: "p-6 border-b border-slate-800", children: _jsxs(Link, { href: "/", className: "flex items-center gap-3 font-bold text-lg", children: [_jsx("div", { className: "w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center", children: "CB" }), _jsx("span", { children: "Billing" })] }) }), _jsx("nav", { className: "flex-1 p-4 space-y-2", children: navItems.map((item) => {

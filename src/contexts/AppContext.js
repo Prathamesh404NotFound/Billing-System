@@ -1,6 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useContext, useState, useCallback, useEffect, } from "react";
-import { defaultShopSettings, categories } from "@/data/mockData";
+import { defaultShopSettings } from "@/data/mockData";
 import { initialDBData } from "@/lib/firebaseSchema";
 import { db } from "@/lib/firebase";
 import { onValue, ref, remove, set, update as updateRef, get, // Added get for initial data check and stock update
@@ -12,20 +12,15 @@ export function AppProvider({ children }) {
     const [appBills, setAppBills] = useState([]);
     const [currentBill, setCurrentBill] = useState(null);
     const [shopSettings, setShopSettings] = useState(defaultShopSettings);
+    const [appCategories, setAppCategories] = useState([]);
+    const [appAlterations, setAppAlterations] = useState([]);
     useEffect(() => {
         console.log("[AppContext] Subscribing to Firebase data (items, bills, shopSettings)");
-        // Quick connectivity test: write a tiny heartbeat node
-        const heartbeatPath = `debug/heartbeat`;
-        set(ref(db, heartbeatPath), { ts: Date.now() })
-            .then(() => {
-            console.log("[Firebase] Heartbeat write OK at path:", heartbeatPath);
-        })
-            .catch(error => {
-            console.error("[Firebase] Heartbeat write FAILED. Check database URL/rules.", error);
-        });
         const itemsRef = ref(db, "items");
         const billsRef = ref(db, "bills");
         const settingsRef = ref(db, "settings"); // Changed from shopSettings to settings
+        const categoriesRef = ref(db, "categories");
+        const alterationsRef = ref(db, "alterations");
         // Initial data population check
         get(itemsRef).then((snapshot) => {
             if (!snapshot.exists()) {
@@ -63,11 +58,43 @@ export function AppProvider({ children }) {
         }, error => {
             console.error("[Firebase] Error while listening to 'shopSettings'", error);
         });
+        const unsubCategories = onValue(categoriesRef, snapshot => {
+            const data = snapshot.val();
+            console.log("[Firebase] categories snapshot received", data);
+            if (data) {
+                // Normal case: categories exist in DB
+                setAppCategories(mapRecordToArray(data));
+            }
+            else {
+                // Fallback: seed categories from initial schema if missing
+                const fallbackCategories = initialDBData.categories || {};
+                const fallbackArray = Object.values(fallbackCategories);
+                console.log("[Firebase] categories empty, seeding from initialDBData", fallbackArray);
+                setAppCategories(fallbackArray);
+                // Also persist them to Realtime Database so future sessions see them
+                if (fallbackArray.length > 0) {
+                    set(categoriesRef, fallbackCategories).catch(error => {
+                        console.error("[Firebase] Failed to seed categories into database", error);
+                    });
+                }
+            }
+        }, error => {
+            console.error("[Firebase] Error while listening to 'categories'", error);
+        });
+        const unsubAlterations = onValue(alterationsRef, snapshot => {
+            const data = snapshot.val();
+            console.log("[Firebase] alterations snapshot received", data);
+            setAppAlterations(mapRecordToArray(data));
+        }, error => {
+            console.error("[Firebase] Error while listening to 'alterations'", error);
+        });
         return () => {
             console.log("[AppContext] Unsubscribing from Firebase listeners");
             unsubItems();
             unsubBills();
             unsubSettings();
+            unsubCategories();
+            unsubAlterations();
         };
     }, []);
     const createNewBill = useCallback(() => {
@@ -78,40 +105,39 @@ export function AppProvider({ children }) {
             subtotal: 0,
             discount: shopSettings.defaultDiscount,
             discountType: 'fixed',
-            tax: 0,
-            taxRate: shopSettings.defaultTaxRate,
             total: 0,
             paymentMode: 'cash',
         };
         setCurrentBill(newBill);
-    }, [shopSettings.defaultDiscount, shopSettings.defaultTaxRate]);
-    const calculateBillTotals = (billItems, discountAmount, discountType, taxRate) => {
+    }, [shopSettings.defaultDiscount]);
+    const calculateBillTotals = (billItems, discountAmount, discountType) => {
         const subtotal = billItems.reduce((sum, item) => sum + item.subtotal, 0);
         const actualDiscount = discountType === 'fixed' ? discountAmount : (subtotal * discountAmount) / 100;
-        const taxableAmount = subtotal - actualDiscount;
-        const tax = (taxableAmount * taxRate) / 100;
-        const total = taxableAmount + tax;
+        const total = subtotal - actualDiscount;
         return {
             subtotal,
             discount: actualDiscount,
-            tax: Math.round(tax),
             total: Math.round(total),
         };
     };
-    const addItemToBill = useCallback((item, variantId, quantity) => {
+    const addItemToBill = useCallback((item, variantId, quantity, price) => {
         if (!currentBill)
             return;
+        if (price <= 0) {
+            console.error("Price must be greater than zero for billing");
+            return;
+        }
         const variant = item.variants.find(v => v.id === variantId);
         if (!variant) {
             console.error("Variant not found for item:", item.id, "variantId:", variantId);
             return;
         }
         // The BillItem now uses variantId for uniqueness in the bill
-        const existingItem = currentBill.items.find((bi) => bi.variantId === variantId);
+        const existingItem = currentBill.items.find((bi) => bi.variantId === variantId && bi.price === price);
         let updatedItems;
         if (existingItem) {
-            updatedItems = currentBill.items.map((bi) => bi.variantId === variantId
-                ? { ...bi, quantity: bi.quantity + quantity, subtotal: (bi.quantity + quantity) * variant.price }
+            updatedItems = currentBill.items.map((bi) => bi.variantId === variantId && bi.price === price
+                ? { ...bi, quantity: bi.quantity + quantity, subtotal: (bi.quantity + quantity) * price }
                 : bi);
         }
         else {
@@ -120,21 +146,20 @@ export function AppProvider({ children }) {
                 {
                     itemId: item.id,
                     itemName: item.name,
-                    price: variant.price,
+                    price,
                     quantity,
-                    subtotal: quantity * variant.price,
+                    subtotal: quantity * price,
                     variantId: variant.id,
                     size: variant.size,
                 },
             ];
         }
-        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
         setCurrentBill({
             ...currentBill,
             items: updatedItems,
             subtotal: totals.subtotal,
             discount: totals.discount,
-            tax: totals.tax,
             total: totals.total,
         });
     }, [currentBill]);
@@ -143,13 +168,12 @@ export function AppProvider({ children }) {
             return;
         // Filter by variantId now
         const updatedItems = currentBill.items.filter((bi) => bi.variantId !== variantId);
-        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
         setCurrentBill({
             ...currentBill,
             items: updatedItems,
             subtotal: totals.subtotal,
             discount: totals.discount,
-            tax: totals.tax,
             total: totals.total,
         });
     }, [currentBill]);
@@ -160,39 +184,24 @@ export function AppProvider({ children }) {
         const updatedItems = currentBill.items.map((bi) => bi.variantId === variantId
             ? { ...bi, quantity, subtotal: quantity * bi.price }
             : bi);
-        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+        const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
         setCurrentBill({
             ...currentBill,
             items: updatedItems,
             subtotal: totals.subtotal,
             discount: totals.discount,
-            tax: totals.tax,
             total: totals.total,
         });
     }, [currentBill]);
     const setDiscount = useCallback((discountValue, type) => {
         if (!currentBill)
             return;
-        const totals = calculateBillTotals(currentBill.items, discountValue, type, currentBill.taxRate);
+        const totals = calculateBillTotals(currentBill.items, discountValue, type);
         setCurrentBill({
             ...currentBill,
             discount: discountValue,
             discountType: type,
             subtotal: totals.subtotal,
-            tax: totals.tax,
-            total: totals.total,
-        });
-    }, [currentBill]);
-    const setTaxRate = useCallback((rate) => {
-        if (!currentBill)
-            return;
-        const totals = calculateBillTotals(currentBill.items, currentBill.discount, currentBill.discountType, rate);
-        setCurrentBill({
-            ...currentBill,
-            taxRate: rate,
-            subtotal: totals.subtotal,
-            discount: totals.discount,
-            tax: totals.tax,
             total: totals.total,
         });
     }, [currentBill]);
@@ -206,51 +215,15 @@ export function AppProvider({ children }) {
         };
         console.log("[Firebase] Saving bill to Realtime Database", billToSave);
         try {
-            // 1. Save the bill
             await set(ref(db, `bills/${billToSave.id}`), billToSave);
             console.log("[Firebase] Bill saved successfully at path:", `bills/${billToSave.id}`);
-            // 2. Update stock for each item variant sold
-            const stockUpdates = {};
-            for (const billItem of billToSave.items) {
-                const item = appItems.find(i => i.id === billItem.itemId);
-                const variant = item?.variants.find(v => v.id === billItem.variantId);
-                if (variant) {
-                    const newStock = variant.stock - billItem.quantity;
-                    // Path: items/{itemId}/variants/{variantIndex}/stock
-                    // Since we don't have the index, we'll fetch the item and find the index.
-                    // A better RTDB structure would be: items/{itemId}/variants/{variantId}
-                    // For now, we'll use a transaction or a more complex update. Let's simplify the structure in the schema first.
-                    // Reverting to a simpler update for now, assuming the ItemManagement page will handle the variant structure correctly.
-                    // To avoid complex transactions, we'll update the whole item's variants array.
-                    // This is a common pattern in RTDB when dealing with arrays.
-                    // For a robust solution, the variant structure should be an object/map, not an array.
-                    // Let's assume the ItemManagement page will handle the variant updates.
-                    // For the sake of completing the task, we'll implement a simple update that assumes the item is available in appItems.
-                    const itemRef = ref(db, `items/${billItem.itemId}`);
-                    const itemSnapshot = await get(itemRef);
-                    const dbItem = itemSnapshot.val();
-                    if (dbItem) {
-                        const variantIndex = dbItem.variants.findIndex(v => v.id === billItem.variantId);
-                        if (variantIndex !== -1) {
-                            const newStock = dbItem.variants[variantIndex].stock - billItem.quantity;
-                            if (newStock < 0) {
-                                console.warn(`[Firebase] Stock for ${billItem.itemName} (${billItem.size}) went negative!`);
-                            }
-                            // Update the stock directly in the variants array
-                            dbItem.variants[variantIndex].stock = newStock;
-                            await set(itemRef, dbItem);
-                            console.log(`[Firebase] Stock updated for ${billItem.itemName} (${billItem.size}) to ${newStock}`);
-                        }
-                    }
-                }
-            }
             setCurrentBill(null);
         }
         catch (error) {
-            console.error("[Firebase] Failed to save bill or update stock", error);
+            console.error("[Firebase] Failed to save bill", error);
             throw error;
         }
-    }, [currentBill, appItems]);
+    }, [currentBill]);
     const addItem = useCallback(async (item) => {
         console.log("[Firebase] Adding item to Realtime Database", item);
         try {
@@ -284,6 +257,72 @@ export function AppProvider({ children }) {
             throw error;
         }
     }, []);
+    const addCategory = useCallback(async (category) => {
+        console.log("[Firebase] Adding category to Realtime Database", category);
+        try {
+            await set(ref(db, `categories/${category.id}`), category);
+            console.log("[Firebase] Category saved successfully at path:", `categories/${category.id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to add category", error);
+            throw error;
+        }
+    }, []);
+    const addAlteration = useCallback(async (alteration) => {
+        console.log("[Firebase] Adding alteration to Realtime Database", alteration);
+        try {
+            await set(ref(db, `alterations/${alteration.id}`), alteration);
+            console.log("[Firebase] Alteration saved successfully at path:", `alterations/${alteration.id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to add alteration", error);
+            throw error;
+        }
+    }, []);
+    const updateAlteration = useCallback(async (id, updates) => {
+        console.log("[Firebase] Updating alteration in Realtime Database", { id, updates });
+        try {
+            await updateRef(ref(db, `alterations/${id}`), updates);
+            console.log("[Firebase] Alteration updated successfully at path:", `alterations/${id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to update alteration", error);
+            throw error;
+        }
+    }, []);
+    const deleteAlteration = useCallback(async (id) => {
+        console.log("[Firebase] Deleting alteration from Realtime Database", { id });
+        try {
+            await remove(ref(db, `alterations/${id}`));
+            console.log("[Firebase] Alteration deleted successfully at path:", `alterations/${id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to delete alteration", error);
+            throw error;
+        }
+    }, []);
+    const updateCategory = useCallback(async (id, updates) => {
+        console.log("[Firebase] Updating category in Realtime Database", { id, updates });
+        try {
+            await updateRef(ref(db, `categories/${id}`), updates);
+            console.log("[Firebase] Category updated successfully at path:", `categories/${id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to update category", error);
+            throw error;
+        }
+    }, []);
+    const deleteCategory = useCallback(async (id) => {
+        console.log("[Firebase] Deleting category from Realtime Database", { id });
+        try {
+            await remove(ref(db, `categories/${id}`));
+            console.log("[Firebase] Category deleted successfully at path:", `categories/${id}`);
+        }
+        catch (error) {
+            console.error("[Firebase] Failed to delete category", error);
+            throw error;
+        }
+    }, []);
     const getItemsByCategory = useCallback((category) => {
         return appItems.filter((item) => item.category === category);
     }, [appItems]);
@@ -314,10 +353,16 @@ export function AppProvider({ children }) {
         updateBillItem,
         saveBill,
         setDiscount,
-        setTaxRate,
         shopSettings,
         updateShopSettings,
-        categories,
+        categories: appCategories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        alterations: appAlterations,
+        addAlteration,
+        updateAlteration,
+        deleteAlteration,
     };
     return _jsx(AppContext.Provider, { value: value, children: children });
 }
