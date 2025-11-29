@@ -7,7 +7,6 @@ interface BillSummaryProps {
   onRemoveItem?: (variantId: string) => void;
   onUpdateQuantity?: (variantId: string, quantity: number) => void;
   onDiscountChange?: (discount: number, type: 'fixed' | 'percentage') => void;
-  onTaxRateChange?: (rate: number) => void;
   onPaymentModeChange?: (mode: PaymentMode) => void;
   onPrint?: () => void;
   onSave?: (paymentMode: PaymentMode) => void;
@@ -18,21 +17,15 @@ export default function BillSummary({
   onRemoveItem,
   onUpdateQuantity,
   onDiscountChange,
-  onTaxRateChange,
   onPaymentModeChange,
   onPrint,
   onSave,
 }: BillSummaryProps) {
   const [discountInput, setDiscountInput] = useState(bill.discount);
   const [discountType, setDiscountType] = useState<'fixed' | 'percentage'>(bill.discountType);
-  const [taxRate, setTaxRate] = useState(bill.taxRate);
 
   const handleDiscountChange = () => {
     onDiscountChange?.(discountInput, discountType);
-  };
-
-  const handleTaxRateChange = () => {
-    onTaxRateChange?.(taxRate);
   };
 
   const paymentModes: PaymentMode[] = ['cash', 'upi', 'card'];
@@ -93,7 +86,7 @@ export default function BillSummary({
           <span className="font-semibold">₹{bill.subtotal}</span>
         </div>
 
-        {/* Discount */}
+        {/* Discount (no GST/tax, only discount) */}
         <div className="flex gap-2 items-center">
           <div className="flex-1">
             <label className="text-xs text-slate-600 block mb-1">Discount</label>
@@ -127,34 +120,7 @@ export default function BillSummary({
           </div>
         </div>
 
-        {/* Tax Rate */}
-        <div className="flex gap-2 items-center">
-          <div className="flex-1">
-            <label className="text-xs text-slate-600 block mb-1">Tax Rate</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={taxRate}
-                onChange={(e) => setTaxRate(Number(e.target.value))}
-                className="flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
-                placeholder="18"
-              />
-              <span className="px-2 py-1 text-sm text-slate-600">%</span>
-              <button
-                onClick={handleTaxRateChange}
-                className="px-3 py-1 bg-slate-200 hover:bg-slate-300 rounded text-sm font-medium transition-colors"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-600">Tax</p>
-            <p className="font-semibold text-slate-900">₹{bill.tax}</p>
-          </div>
-        </div>
-
-        {/* Total */}
+        {/* Total (without GST) */}
         <div className="bg-indigo-50 p-3 rounded-lg flex justify-between items-center">
           <span className="font-bold text-slate-900">Total Amount</span>
           <span className="text-2xl font-bold text-indigo-600">₹{bill.total}</span>

@@ -28,6 +28,7 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
   const { addItemToBill } = useApp();
   const [selectedVariantId, setSelectedVariantId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
+  const [price, setPrice] = useState<number>(0);
 
   const variants = useMemo(() => item?.variants || [], [item]);
 
@@ -41,9 +42,11 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
       // Select the first variant by default
       setSelectedVariantId(variants[0].id);
       setQuantity(1);
+      setPrice(0);
     } else if (!isOpen) {
       setSelectedVariantId('');
       setQuantity(1);
+      setPrice(0);
     }
   }, [isOpen, variants]);
 
@@ -57,9 +60,21 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
     []
   );
 
+  const handlePriceChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = parseFloat(e.target.value);
+      if (!isNaN(value) && value >= 0) {
+        setPrice(value);
+      } else if (e.target.value === '') {
+        setPrice(0);
+      }
+    },
+    []
+  );
+
   const handleAddToBill = useCallback(() => {
-    if (!item || !selectedVariantId || quantity < 1) {
-      toast.error('Please select a variant and a valid quantity.');
+    if (!item || !selectedVariantId || quantity < 1 || price <= 0) {
+      toast.error('Please select a variant, set a valid quantity, and enter a price.');
       return;
     }
 
@@ -69,21 +84,12 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
       return;
     }
 
-    if (variant.stock < quantity) {
-      toast.warning(
-        `Only ${variant.stock} units of ${item.name} (${variant.size}) are in stock.`
-      );
-      // Optionally, set quantity to max available stock
-      // setQuantity(variant.stock);
-      // return;
-    }
-
-    addItemToBill(item, selectedVariantId, quantity);
+    addItemToBill(item, selectedVariantId, quantity, price);
     toast.success(
       `${quantity} x ${item.name} (${variant.size}) added to bill.`
     );
     onClose();
-  }, [item, selectedVariantId, quantity, variants, addItemToBill, onClose]);
+  }, [item, selectedVariantId, quantity, price, variants, addItemToBill, onClose]);
 
   if (!item) return null;
 
@@ -99,7 +105,7 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="variant" className="text-right">
-              Size/Price
+              Size
             </Label>
             <div className="col-span-3">
               <RadioGroup
@@ -115,15 +121,24 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
                     <RadioGroupItem value={variant.id} id={variant.id} />
                     <Label htmlFor={variant.id} className="flex justify-between w-full cursor-pointer">
                       <span>Size: {variant.size}</span>
-                      <span className="font-semibold">₹{variant.price}</span>
-                      <span className="text-xs text-gray-500">
-                        (Stock: {variant.stock})
-                      </span>
                     </Label>
                   </div>
                 ))}
               </RadioGroup>
             </div>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="price" className="text-right">
+              Price (₹)
+            </Label>
+            <Input
+              id="price"
+              type="number"
+              value={price}
+              onChange={handlePriceChange}
+              min="0"
+              className="col-span-3"
+            />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="quantity" className="text-right">
@@ -141,7 +156,7 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({
           {selectedVariant && (
             <div className="text-center mt-2 p-2 bg-gray-100 rounded-md">
               <p className="text-lg font-bold">
-                Total: ₹{(selectedVariant.price * quantity).toFixed(2)}
+                Total: ₹{(price * quantity).toFixed(2)}
               </p>
             </div>
           )}

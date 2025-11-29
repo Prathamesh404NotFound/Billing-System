@@ -8,7 +8,7 @@ import { useToast } from '@/components/Toast';
 import { DBItem, PaymentMode } from '@/types';
 
 export default function MakeBill() {
-  const { currentBill, createNewBill, getItemsByCategory, categories, addItemToBill, removeItemFromBill, updateBillItem, setDiscount, setTaxRate, saveBill } = useApp();
+  const { currentBill, createNewBill, getItemsByCategory, categories, addItemToBill, removeItemFromBill, updateBillItem, setDiscount, saveBill } = useApp();
   const { show } = useToast();
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || '');
   const [customerName, setCustomerName] = useState('');
@@ -119,7 +119,6 @@ export default function MakeBill() {
             <div class="total-section">
               <p><strong>Subtotal:</strong> ₹${currentBill.subtotal}</p>
               <p><strong>Discount:</strong> -₹${Math.round(currentBill.discount)}</p>
-              <p><strong>Tax (${currentBill.taxRate}%):</strong> ₹${currentBill.tax}</p>
               <h2><strong>Total:</strong> ₹${currentBill.total}</h2>
             </div>
           </body>
@@ -138,7 +137,7 @@ export default function MakeBill() {
     }
 
     const itemsList = currentBill.items.map((item) => `${item.itemName} (${item.quantity}x ₹${item.price})`).join('\n');
-    const message = `Bill Summary\n\n${itemsList}\n\nSubtotal: ₹${currentBill.subtotal}\nDiscount: -₹${Math.round(currentBill.discount)}\nTax: ₹${currentBill.tax}\n\nTotal: ₹${currentBill.total}`;
+    const message = `Bill Summary\n\n${itemsList}\n\nSubtotal: ₹${currentBill.subtotal}\nDiscount: -₹${Math.round(currentBill.discount)}\n\nTotal: ₹${currentBill.total}`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
     show('Redirecting to WhatsApp...', 'info');
@@ -210,7 +209,6 @@ export default function MakeBill() {
               onRemoveItem={removeItemFromBill}
               onUpdateQuantity={updateBillItem}
               onDiscountChange={setDiscount}
-              onTaxRateChange={setTaxRate}
               onPaymentModeChange={(mode) => setPaymentMode(mode)}
               onPrint={handlePrintBill}
               onSave={() => handleSaveBill()}
@@ -275,10 +273,6 @@ export default function MakeBill() {
               <div className="flex justify-between">
                 <span className="text-slate-600">Discount</span>
                 <span className="font-semibold text-red-600">-₹{Math.round(currentBill.discount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-600">Tax</span>
-                <span className="font-semibold">₹{currentBill.tax}</span>
               </div>
               <div className="border-t border-slate-200 pt-2 flex justify-between">
                 <span className="font-bold text-slate-900">Total</span>

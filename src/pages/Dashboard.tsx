@@ -67,7 +67,7 @@ export default function Dashboard() {
       {/* Quick Links */}
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-xl font-bold text-slate-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Link
             href="/make-bill"
             className="p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors text-center"
@@ -88,6 +88,20 @@ export default function Dashboard() {
           >
             <p className="font-semibold text-green-900">Item Management</p>
             <p className="text-sm text-green-700">Manage items</p>
+          </Link>
+          <Link
+            href="/categories"
+            className="p-4 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors text-center"
+          >
+            <p className="font-semibold text-purple-900">Categories</p>
+            <p className="text-sm text-purple-700">Organise product groups</p>
+          </Link>
+          <Link
+            href="/alterations"
+            className="p-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors text-center"
+          >
+            <p className="font-semibold text-rose-900">Alterations</p>
+            <p className="text-sm text-rose-700">Track stitching jobs</p>
           </Link>
         </div>
       </div>

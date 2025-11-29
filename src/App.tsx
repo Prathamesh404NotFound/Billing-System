@@ -9,6 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import MakeBill from "./pages/MakeBill";
 import ViewBills from "./pages/ViewBills";
 import ItemManagement from "./pages/ItemManagement";
+import CategoriesManagement from "./pages/CategoriesManagement";
+import Alterations from "./pages/Alterations";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -19,6 +21,8 @@ function Router() {
       <Route path={"/make-bill"} component={MakeBill} />
       <Route path={"/view-bills"} component={ViewBills} />
       <Route path={"/items"} component={ItemManagement} />
+      <Route path={"/categories"} component={CategoriesManagement} />
+      <Route path={"/alterations"} component={Alterations} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

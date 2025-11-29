@@ -151,20 +151,10 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Default Settings */}
+        {/* Default Settings (no GST) */}
         <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Default Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-1">Default Tax Rate (%)</label>
-              <input
-                type="number"
-                name="defaultTaxRate"
-                value={formData.defaultTaxRate}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-slate-900 mb-1">Default Discount</label>
               <input

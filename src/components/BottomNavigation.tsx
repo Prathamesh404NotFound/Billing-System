@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, FileText, Package, Settings, Plus } from 'lucide-react';
+import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -14,6 +14,8 @@ export default function BottomNavigation() {
     { label: 'Dashboard', href: '/', icon: <LayoutDashboard size={20} /> },
     { label: 'Bills', href: '/view-bills', icon: <FileText size={20} /> },
     { label: 'Items', href: '/items', icon: <Package size={20} /> },
+    { label: 'Categories', href: '/categories', icon: <Tags size={20} /> },
+    { label: 'Alter', href: '/alterations', icon: <Scissors size={20} /> },
     { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
   ];
 

@@ -17,8 +17,10 @@ export interface Item {
 export interface ItemVariant {
   id: string; // Unique ID for the variant (e.g., 's1-M-1299')
   size: string;
-  price: number;
-  stock: number; // Keeping stock for management purposes
+  // price and stock are intentionally omitted from the UI/business logic.
+  // They may still exist in older database records but are no longer used.
+  price?: number;
+  stock?: number;
 }
 
 // Database Item (Item + Variants)
@@ -48,8 +50,6 @@ export interface Bill {
   subtotal: number;
   discount: number;
   discountType: 'fixed' | 'percentage';
-  tax: number;
-  taxRate: number;
   total: number;
   paymentMode: PaymentMode;
 }
@@ -61,10 +61,21 @@ export interface ShopSettings {
   contactNumber: string;
   whatsappNumber: string;
   logo?: string;
-  defaultTaxRate: number;
   defaultDiscount: number;
   theme: 'light' | 'dark';
   accentColor: string;
+}
+
+// Cloth Alteration tracking
+export interface Alteration {
+  id: string;
+  customerName: string;
+  contactNumber?: string;
+  garmentDescription: string;
+  measurements: string;
+  dueDate?: string;
+  notes?: string;
+  isCompleted: boolean;
 }
 
 // Dashboard Stats

@@ -12,7 +12,6 @@ export const defaultShopSettings: ShopSettings = {
   address: '123 Market Street, City Center',
   contactNumber: '+91 98765 43210',
   whatsappNumber: '+91 98765 43210',
-  defaultTaxRate: 18,
   defaultDiscount: 0,
   theme: 'light',
   accentColor: '#4f46e5',

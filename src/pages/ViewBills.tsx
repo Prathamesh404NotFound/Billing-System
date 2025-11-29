@@ -84,7 +84,6 @@ export default function ViewBills() {
             <div class="total-section">
               <p><strong>Subtotal:</strong> ₹${bill.subtotal}</p>
               <p><strong>Discount:</strong> -₹${Math.round(bill.discount)}</p>
-              <p><strong>Tax (${bill.taxRate}%):</strong> ₹${bill.tax}</p>
               <h2><strong>Total:</strong> ₹${bill.total}</h2>
             </div>
           </body>
@@ -269,10 +268,6 @@ export default function ViewBills() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Discount</span>
                 <span className="font-semibold text-red-600">-₹{Math.round(selectedBill.discount)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Tax ({selectedBill.taxRate}%)</span>
-                <span className="font-semibold">₹{selectedBill.tax}</span>
               </div>
               <div className="flex justify-between text-lg border-t border-slate-200 pt-2">
                 <span className="font-bold text-slate-900">Total</span>

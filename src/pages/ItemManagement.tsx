@@ -47,7 +47,7 @@ export default function ItemManagement() {
         description: '',
       });
       // Start with one empty variant for new items
-      setVariants([{ id: `v-${Date.now()}`, size: '', price: 0, stock: 0 }]);
+      setVariants([{ id: `v-${Date.now()}`, size: '' }]);
     }
     setShowModal(true);
   };
@@ -68,7 +68,7 @@ export default function ItemManagement() {
       return;
     }
 
-    const validVariants = variants.filter(v => v.size && v.price > 0);
+    const validVariants = variants.filter(v => v.size);
     if (validVariants.length === 0) {
       show("Please add at least one valid variant (Size and Price > 0)", "error");
       return;
@@ -126,15 +126,14 @@ export default function ItemManagement() {
 
   const handleVariantChange = (index: number, field: keyof ItemVariant, value: string | number) => {
     const newVariants = [...variants];
-    const isNumberField = field === 'price' || field === 'stock';
-    const finalValue = isNumberField ? Number(value) : value;
+    const finalValue = value;
 
-    // Ensure ID is unique and stable
-    if (field === 'size' || field === 'price') {
+    // Ensure ID is unique and stable based on size
+    if (field === 'size') {
       newVariants[index] = {
         ...newVariants[index],
         [field]: finalValue,
-        id: `v-${newVariants[index].id.split('-')[1]}-${finalValue}`, // Update ID based on size/price change
+        id: `v-${index}-${finalValue}`, // Update ID based on size change
       };
     } else {
       newVariants[index] = {
@@ -147,7 +146,7 @@ export default function ItemManagement() {
   };
 
   const handleAddVariant = () => {
-    setVariants([...variants, { id: `v-${Date.now()}`, size: '', price: 0, stock: 0 }]);
+      setVariants([...variants, { id: `v-${Date.now()}`, size: '' }]);
   };
 
   const handleRemoveVariant = (index: number) => {
@@ -337,9 +336,9 @@ export default function ItemManagement() {
             />
           </div>
 
-	          {/* Price field removed and replaced by Variants section */}
+	          {/* Variants section (only sizes, no price/stock) */}
 	          <div className="space-y-4 border-t pt-4 border-slate-200">
-	            <h3 className="text-lg font-bold text-slate-900">Variants (Size, Price, Stock)</h3>
+	            <h3 className="text-lg font-bold text-slate-900">Variants (Sizes)</h3>
 	            {variants.map((variant, index) => (
 	              <div key={variant.id} className="flex gap-2 items-end p-3 border border-slate-200 rounded-lg">
 	                <div className="flex-1">
@@ -350,26 +349,6 @@ export default function ItemManagement() {
 	                    onChange={(e) => handleVariantChange(index, 'size', e.target.value)}
 	                    className="w-full px-2 py-1 border border-slate-300 rounded-lg text-sm"
 	                    placeholder="e.g., S, M, 32"
-	                  />
-	                </div>
-	                <div className="flex-1">
-	                  <label className="block text-xs font-medium text-slate-500 mb-1">Price (₹) *</label>
-	                  <input
-	                    type="number"
-	                    value={variant.price}
-	                    onChange={(e) => handleVariantChange(index, 'price', e.target.value)}
-	                    className="w-full px-2 py-1 border border-slate-300 rounded-lg text-sm"
-	                    placeholder="0"
-	                  />
-	                </div>
-	                <div className="flex-1">
-	                  <label className="block text-xs font-medium text-slate-500 mb-1">Stock</label>
-	                  <input
-	                    type="number"
-	                    value={variant.stock}
-	                    onChange={(e) => handleVariantChange(index, 'stock', e.target.value)}
-	                    className="w-full px-2 py-1 border border-slate-300 rounded-lg text-sm"
-	                    placeholder="0"
 	                  />
 	                </div>
 	                <button

@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { Item, DBItem, Bill, ShopSettings, BillItem, PaymentMode, Category } from "@/types";
+import { Item, DBItem, Bill, ShopSettings, BillItem, PaymentMode, Category, Alteration } from "@/types";
 import { defaultShopSettings } from "@/data/mockData";
 import { initialDBData } from "@/lib/firebaseSchema";
 import { db } from "@/lib/firebase";
@@ -30,12 +30,11 @@ interface AppContextType {
   bills: Bill[];
   currentBill: Bill | null;
   createNewBill: () => void;
-  addItemToBill: (item: DBItem, variantId: string, quantity: number) => void; // Updated signature
+  addItemToBill: (item: DBItem, variantId: string, quantity: number, price: number) => void;
   removeItemFromBill: (variantId: string) => void; // Updated to use variantId
   updateBillItem: (variantId: string, quantity: number) => void; // Updated to use variantId
   saveBill: (paymentMode: PaymentMode, customerName?: string) => Promise<void>;
   setDiscount: (discount: number, type: 'fixed' | 'percentage') => void;
-  setTaxRate: (rate: number) => void;
 
   // Settings
   shopSettings: ShopSettings;
@@ -46,6 +45,12 @@ interface AppContextType {
   addCategory: (category: Category) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+
+  // Alterations
+  alterations: Alteration[];
+  addAlteration: (alteration: Alteration) => Promise<void>;
+  updateAlteration: (id: string, updates: Partial<Alteration>) => Promise<void>;
+  deleteAlteration: (id: string) => Promise<void>;
 }
 
 
@@ -61,6 +66,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
   const [shopSettings, setShopSettings] = useState<ShopSettings>(defaultShopSettings);
   const [appCategories, setAppCategories] = useState<Category[]>([]);
+  const [appAlterations, setAppAlterations] = useState<Alteration[]>([]);
 
   useEffect(() => {
     console.log("[AppContext] Subscribing to Firebase data (items, bills, shopSettings)");
@@ -69,6 +75,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const billsRef = ref(db, "bills");
     const settingsRef = ref(db, "settings"); // Changed from shopSettings to settings
     const categoriesRef = ref(db, "categories");
+    const alterationsRef = ref(db, "alterations");
 
     // Initial data population check
     get(itemsRef).then((snapshot) => {
@@ -154,12 +161,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const unsubAlterations = onValue(
+      alterationsRef,
+      snapshot => {
+        const data = snapshot.val();
+        console.log("[Firebase] alterations snapshot received", data);
+        setAppAlterations(mapRecordToArray<Alteration>(data));
+      },
+      error => {
+        console.error("[Firebase] Error while listening to 'alterations'", error);
+      }
+    );
+
     return () => {
       console.log("[AppContext] Unsubscribing from Firebase listeners");
       unsubItems();
       unsubBills();
       unsubSettings();
       unsubCategories();
+      unsubAlterations();
     };
   }, []);
 
@@ -171,31 +191,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       subtotal: 0,
       discount: shopSettings.defaultDiscount,
       discountType: 'fixed',
-      tax: 0,
-      taxRate: shopSettings.defaultTaxRate,
       total: 0,
       paymentMode: 'cash',
     };
     setCurrentBill(newBill);
-  }, [shopSettings.defaultDiscount, shopSettings.defaultTaxRate]);
+  }, [shopSettings.defaultDiscount]);
 
-  const calculateBillTotals = (billItems: BillItem[], discountAmount: number, discountType: 'fixed' | 'percentage', taxRate: number) => {
+  const calculateBillTotals = (billItems: BillItem[], discountAmount: number, discountType: 'fixed' | 'percentage') => {
     const subtotal = billItems.reduce((sum, item) => sum + item.subtotal, 0);
     const actualDiscount = discountType === 'fixed' ? discountAmount : (subtotal * discountAmount) / 100;
-    const taxableAmount = subtotal - actualDiscount;
-    const tax = (taxableAmount * taxRate) / 100;
-    const total = taxableAmount + tax;
+    const total = subtotal - actualDiscount;
 
     return {
       subtotal,
       discount: actualDiscount,
-      tax: Math.round(tax),
       total: Math.round(total),
     };
   };
 
-  const addItemToBill = useCallback((item: DBItem, variantId: string, quantity: number) => {
+  const addItemToBill = useCallback((item: DBItem, variantId: string, quantity: number, price: number) => {
     if (!currentBill) return;
+    if (price <= 0) {
+      console.error("Price must be greater than zero for billing");
+      return;
+    }
 
     const variant = item.variants.find(v => v.id === variantId);
     if (!variant) {
@@ -204,13 +223,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // The BillItem now uses variantId for uniqueness in the bill
-    const existingItem = currentBill.items.find((bi) => bi.variantId === variantId);
+    const existingItem = currentBill.items.find((bi) => bi.variantId === variantId && bi.price === price);
     let updatedItems: BillItem[];
 
     if (existingItem) {
       updatedItems = currentBill.items.map((bi) =>
-        bi.variantId === variantId
-          ? { ...bi, quantity: bi.quantity + quantity, subtotal: (bi.quantity + quantity) * variant.price }
+        bi.variantId === variantId && bi.price === price
+          ? { ...bi, quantity: bi.quantity + quantity, subtotal: (bi.quantity + quantity) * price }
           : bi
       );
     } else {
@@ -219,23 +238,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         {
           itemId: item.id,
           itemName: item.name,
-          price: variant.price,
+          price,
           quantity,
-          subtotal: quantity * variant.price,
+          subtotal: quantity * price,
           variantId: variant.id,
           size: variant.size,
         },
       ];
     }
 
-    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
 
     setCurrentBill({
       ...currentBill,
       items: updatedItems,
       subtotal: totals.subtotal,
       discount: totals.discount,
-      tax: totals.tax,
       total: totals.total,
     });
   }, [currentBill]);
@@ -245,14 +263,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Filter by variantId now
     const updatedItems = currentBill.items.filter((bi) => bi.variantId !== variantId);
-    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
 
     setCurrentBill({
       ...currentBill,
       items: updatedItems,
       subtotal: totals.subtotal,
       discount: totals.discount,
-      tax: totals.tax,
       total: totals.total,
     });
   }, [currentBill]);
@@ -267,14 +284,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         : bi
     );
 
-    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType, currentBill.taxRate);
+    const totals = calculateBillTotals(updatedItems, currentBill.discount, currentBill.discountType);
 
     setCurrentBill({
       ...currentBill,
       items: updatedItems,
       subtotal: totals.subtotal,
       discount: totals.discount,
-      tax: totals.tax,
       total: totals.total,
     });
   }, [currentBill]);
@@ -282,29 +298,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setDiscount = useCallback((discountValue: number, type: 'fixed' | 'percentage') => {
     if (!currentBill) return;
 
-    const totals = calculateBillTotals(currentBill.items, discountValue, type, currentBill.taxRate);
+    const totals = calculateBillTotals(currentBill.items, discountValue, type);
 
     setCurrentBill({
       ...currentBill,
       discount: discountValue,
       discountType: type,
       subtotal: totals.subtotal,
-      tax: totals.tax,
-      total: totals.total,
-    });
-  }, [currentBill]);
-
-  const setTaxRate = useCallback((rate: number) => {
-    if (!currentBill) return;
-
-    const totals = calculateBillTotals(currentBill.items, currentBill.discount, currentBill.discountType, rate);
-
-    setCurrentBill({
-      ...currentBill,
-      taxRate: rate,
-      subtotal: totals.subtotal,
-      discount: totals.discount,
-      tax: totals.tax,
       total: totals.total,
     });
   }, [currentBill]);
@@ -321,57 +321,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[Firebase] Saving bill to Realtime Database", billToSave);
       try {
-        // 1. Save the bill
         await set(ref(db, `bills/${billToSave.id}`), billToSave);
         console.log("[Firebase] Bill saved successfully at path:", `bills/${billToSave.id}`);
 
-        // 2. Update stock for each item variant sold
-        const stockUpdates: Record<string, number> = {};
-        for (const billItem of billToSave.items) {
-          const item = appItems.find(i => i.id === billItem.itemId);
-          const variant = item?.variants.find(v => v.id === billItem.variantId);
-
-          if (variant) {
-            const newStock = variant.stock - billItem.quantity;
-            // Path: items/{itemId}/variants/{variantIndex}/stock
-            // Since we don't have the index, we'll fetch the item and find the index.
-            // A better RTDB structure would be: items/{itemId}/variants/{variantId}
-            // For now, we'll use a transaction or a more complex update. Let's simplify the structure in the schema first.
-            // Reverting to a simpler update for now, assuming the ItemManagement page will handle the variant structure correctly.
-
-            // To avoid complex transactions, we'll update the whole item's variants array.
-            // This is a common pattern in RTDB when dealing with arrays.
-            // For a robust solution, the variant structure should be an object/map, not an array.
-            // Let's assume the ItemManagement page will handle the variant updates.
-            // For the sake of completing the task, we'll implement a simple update that assumes the item is available in appItems.
-
-            const itemRef = ref(db, `items/${billItem.itemId}`);
-            const itemSnapshot = await get(itemRef);
-            const dbItem: DBItem = itemSnapshot.val();
-
-            if (dbItem) {
-              const variantIndex = dbItem.variants.findIndex(v => v.id === billItem.variantId);
-              if (variantIndex !== -1) {
-                const newStock = dbItem.variants[variantIndex].stock - billItem.quantity;
-                if (newStock < 0) {
-                  console.warn(`[Firebase] Stock for ${billItem.itemName} (${billItem.size}) went negative!`);
-                }
-                // Update the stock directly in the variants array
-                dbItem.variants[variantIndex].stock = newStock;
-                await set(itemRef, dbItem);
-                console.log(`[Firebase] Stock updated for ${billItem.itemName} (${billItem.size}) to ${newStock}`);
-              }
-            }
-          }
-        }
-
         setCurrentBill(null);
       } catch (error) {
-        console.error("[Firebase] Failed to save bill or update stock", error);
+        console.error("[Firebase] Failed to save bill", error);
         throw error;
       }
     },
-    [currentBill, appItems]
+    [currentBill]
   );
 
   const addItem = useCallback(async (item: DBItem) => {
@@ -414,6 +373,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.log("[Firebase] Category saved successfully at path:", `categories/${category.id}`);
     } catch (error) {
       console.error("[Firebase] Failed to add category", error);
+      throw error;
+    }
+  }, []);
+
+  const addAlteration = useCallback(async (alteration: Alteration) => {
+    console.log("[Firebase] Adding alteration to Realtime Database", alteration);
+    try {
+      await set(ref(db, `alterations/${alteration.id}`), alteration);
+      console.log("[Firebase] Alteration saved successfully at path:", `alterations/${alteration.id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to add alteration", error);
+      throw error;
+    }
+  }, []);
+
+  const updateAlteration = useCallback(async (id: string, updates: Partial<Alteration>) => {
+    console.log("[Firebase] Updating alteration in Realtime Database", { id, updates });
+    try {
+      await updateRef(ref(db, `alterations/${id}`), updates);
+      console.log("[Firebase] Alteration updated successfully at path:", `alterations/${id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to update alteration", error);
+      throw error;
+    }
+  }, []);
+
+  const deleteAlteration = useCallback(async (id: string) => {
+    console.log("[Firebase] Deleting alteration from Realtime Database", { id });
+    try {
+      await remove(ref(db, `alterations/${id}`));
+      console.log("[Firebase] Alteration deleted successfully at path:", `alterations/${id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to delete alteration", error);
       throw error;
     }
   }, []);
@@ -474,13 +466,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateBillItem,
     saveBill,
     setDiscount,
-    setTaxRate,
     shopSettings,
     updateShopSettings,
     categories: appCategories,
     addCategory,
     updateCategory,
     deleteCategory,
+    alterations: appAlterations,
+    addAlteration,
+    updateAlteration,
+    deleteAlteration,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
