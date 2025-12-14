@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors } from 'lucide-react';
+import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors, Users, Warehouse, ShoppingCart } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -17,6 +17,9 @@ export default function Sidebar() {
     { label: 'View Bills', href: '/view-bills', icon: <FileText size={20} /> },
     { label: 'Items', href: '/items', icon: <Package size={20} /> },
     { label: 'Categories', href: '/categories', icon: <Tags size={20} /> },
+    { label: 'Inventory', href: '/inventory', icon: <Warehouse size={20} /> },
+    { label: 'Dealers', href: '/dealers', icon: <Users size={20} /> },
+    { label: 'Purchases', href: '/dealer-purchases', icon: <ShoppingCart size={20} /> },
     { label: 'Alterations', href: '/alterations', icon: <Scissors size={20} /> },
     { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
   ];

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors } from 'lucide-react';
+import { LayoutDashboard, FileText, Package, Settings, Plus, Tags, Scissors, Users, Warehouse, ShoppingCart } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -15,27 +15,30 @@ export default function BottomNavigation() {
     { label: 'Bills', href: '/view-bills', icon: <FileText size={20} /> },
     { label: 'Items', href: '/items', icon: <Package size={20} /> },
     { label: 'Categories', href: '/categories', icon: <Tags size={20} /> },
-    { label: 'Alter', href: '/alterations', icon: <Scissors size={20} /> },
+    { label: 'Inventory', href: '/inventory', icon: <Warehouse size={20} /> },
+    { label: 'Dealers', href: '/dealers', icon: <Users size={20} /> },
+    { label: 'Purchases', href: '/dealer-purchases', icon: <ShoppingCart size={20} /> },
+    { label: 'Alterations', href: '/alterations', icon: <Scissors size={20} /> },
     { label: 'Settings', href: '/settings', icon: <Settings size={20} /> },
   ];
 
   return (
     <>
       {/* Bottom Navigation for Mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-slate-200 z-40">
-        <div className="flex justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-slate-200 z-40 overflow-x-auto">
+        <div className="flex justify-around min-w-full">
           {navItems.map((item) => {
             const isActive = location === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
+                className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 min-w-[70px] transition-colors ${
                   isActive ? 'text-indigo-600' : 'text-slate-500'
                 }`}
               >
                 {item.icon}
-                <span className="text-xs font-medium">{item.label}</span>
+                <span className="text-[10px] font-medium text-center leading-tight">{item.label}</span>
               </Link>
             );
           })}

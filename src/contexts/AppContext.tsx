@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { Item, DBItem, Bill, ShopSettings, BillItem, PaymentMode, Category, Alteration } from "@/types";
+import { Item, DBItem, Bill, ShopSettings, BillItem, PaymentMode, Category, Alteration, Dealer, InventoryItem, DealerPurchase, PurchaseItem, StockHistory } from "@/types";
 import { defaultShopSettings } from "@/data/mockData";
 import { initialDBData } from "@/lib/firebaseSchema";
 import { db } from "@/lib/firebase";
@@ -51,6 +51,22 @@ interface AppContextType {
   addAlteration: (alteration: Alteration) => Promise<void>;
   updateAlteration: (id: string, updates: Partial<Alteration>) => Promise<void>;
   deleteAlteration: (id: string) => Promise<void>;
+
+  // Dealers
+  dealers: Dealer[];
+  addDealer: (dealer: Dealer) => Promise<void>;
+  updateDealer: (id: string, updates: Partial<Dealer>) => Promise<void>;
+  deleteDealer: (id: string) => Promise<void>;
+
+  // Inventory
+  inventory: InventoryItem[];
+  getInventoryByItem: (itemId: string, variantId: string) => InventoryItem | null;
+  updateInventoryStock: (itemId: string, variantId: string, change: number, reason: 'purchase' | 'sale' | 'adjustment' | 'manual', referenceId?: string) => Promise<void>;
+  getLowStockItems: (threshold?: number) => InventoryItem[];
+
+  // Dealer Purchases
+  dealerPurchases: DealerPurchase[];
+  addDealerPurchase: (purchase: DealerPurchase) => Promise<void>;
 }
 
 
@@ -67,6 +83,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [shopSettings, setShopSettings] = useState<ShopSettings>(defaultShopSettings);
   const [appCategories, setAppCategories] = useState<Category[]>([]);
   const [appAlterations, setAppAlterations] = useState<Alteration[]>([]);
+  const [appDealers, setAppDealers] = useState<Dealer[]>([]);
+  const [appInventory, setAppInventory] = useState<InventoryItem[]>([]);
+  const [appDealerPurchases, setAppDealerPurchases] = useState<DealerPurchase[]>([]);
 
   useEffect(() => {
     console.log("[AppContext] Subscribing to Firebase data (items, bills, shopSettings)");
@@ -76,6 +95,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const settingsRef = ref(db, "settings"); // Changed from shopSettings to settings
     const categoriesRef = ref(db, "categories");
     const alterationsRef = ref(db, "alterations");
+    const dealersRef = ref(db, "dealers");
+    const inventoryRef = ref(db, "inventory");
+    const dealerPurchasesRef = ref(db, "dealerPurchases");
 
     // Initial data population check
     get(itemsRef).then((snapshot) => {
@@ -173,6 +195,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const unsubDealers = onValue(
+      dealersRef,
+      snapshot => {
+        const data = snapshot.val();
+        console.log("[Firebase] dealers snapshot received", data);
+        setAppDealers(mapRecordToArray<Dealer>(data));
+      },
+      error => {
+        console.error("[Firebase] Error while listening to 'dealers'", error);
+      }
+    );
+
+    const unsubInventory = onValue(
+      inventoryRef,
+      snapshot => {
+        const data = snapshot.val();
+        console.log("[Firebase] inventory snapshot received", data);
+        setAppInventory(mapRecordToArray<InventoryItem>(data));
+      },
+      error => {
+        console.error("[Firebase] Error while listening to 'inventory'", error);
+      }
+    );
+
+    const unsubDealerPurchases = onValue(
+      dealerPurchasesRef,
+      snapshot => {
+        const data = snapshot.val();
+        console.log("[Firebase] dealerPurchases snapshot received", data);
+        const purchases = mapRecordToArray<DealerPurchase>(data).sort(
+          (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
+        );
+        setAppDealerPurchases(purchases);
+      },
+      error => {
+        console.error("[Firebase] Error while listening to 'dealerPurchases'", error);
+      }
+    );
+
     return () => {
       console.log("[AppContext] Unsubscribing from Firebase listeners");
       unsubItems();
@@ -180,6 +241,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubSettings();
       unsubCategories();
       unsubAlterations();
+      unsubDealers();
+      unsubInventory();
+      unsubDealerPurchases();
     };
   }, []);
 
@@ -309,6 +373,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [currentBill]);
 
+  // Inventory Management - Define before saveBill
+  const getInventoryByItem = useCallback((itemId: string, variantId: string): InventoryItem | null => {
+    return appInventory.find(inv => inv.itemId === itemId && inv.variantId === variantId) || null;
+  }, [appInventory]);
+
+  const updateInventoryStock = useCallback(async (
+    itemId: string,
+    variantId: string,
+    change: number,
+    reason: 'purchase' | 'sale' | 'adjustment' | 'manual',
+    referenceId?: string
+  ) => {
+    const existing = getInventoryByItem(itemId, variantId);
+    const item = appItems.find(i => i.id === itemId);
+    const variant = item?.variants.find(v => v.id === variantId);
+    
+    if (!item || !variant) {
+      throw new Error(`Item or variant not found: ${itemId}/${variantId}`);
+    }
+
+    const previousStock = existing?.stock || 0;
+    const newStock = previousStock + change;
+
+    if (newStock < 0) {
+      throw new Error(`Insufficient stock. Available: ${previousStock}, Requested: ${Math.abs(change)}`);
+    }
+
+    const inventoryId = `${itemId}_${variantId}`;
+    const inventoryItem: InventoryItem = {
+      itemId,
+      itemName: item.name,
+      category: item.category,
+      variant: variant.size,
+      variantId,
+      stock: newStock,
+      costPrice: existing?.costPrice || 0,
+      sellingPrice: existing?.sellingPrice || 0,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Update inventory
+    await set(ref(db, `inventory/${inventoryId}`), inventoryItem);
+
+    // Add stock history
+    const historyId = `hist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const history: StockHistory = {
+      id: historyId,
+      itemId,
+      variantId,
+      itemName: item.name,
+      variant: variant.size,
+      change,
+      previousStock,
+      newStock,
+      reason,
+      referenceId,
+      timestamp: new Date().toISOString(),
+    };
+    await set(ref(db, `stockHistory/${historyId}`), history);
+
+    console.log("[Firebase] Inventory updated:", inventoryId, `Stock: ${previousStock} -> ${newStock}`);
+  }, [appItems, appInventory, getInventoryByItem]);
+
+  const getLowStockItems = useCallback((threshold: number = 10): InventoryItem[] => {
+    return appInventory.filter(inv => inv.stock <= threshold);
+  }, [appInventory]);
+
   const saveBill = useCallback(
     async (paymentMode: PaymentMode, customerName?: string) => {
       if (!currentBill || currentBill.items.length === 0) return;
@@ -321,16 +452,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[Firebase] Saving bill to Realtime Database", billToSave);
       try {
+        // Save bill
         await set(ref(db, `bills/${billToSave.id}`), billToSave);
-        console.log("[Firebase] Bill saved successfully at path:", `bills/${billToSave.id}`);
 
+        // Update inventory (decrease stock for each item)
+        for (const item of billToSave.items) {
+          try {
+            await updateInventoryStock(
+              item.itemId,
+              item.variantId,
+              -item.quantity,
+              'sale',
+              billToSave.id
+            );
+          } catch (stockError) {
+            console.error(`[Firebase] Failed to update stock for item ${item.itemId}/${item.variantId}:`, stockError);
+            // Continue with other items even if one fails
+          }
+        }
+
+        console.log("[Firebase] Bill saved successfully at path:", `bills/${billToSave.id}`);
         setCurrentBill(null);
       } catch (error) {
         console.error("[Firebase] Failed to save bill", error);
         throw error;
       }
     },
-    [currentBill]
+    [currentBill, updateInventoryStock]
   );
 
   const addItem = useCallback(async (item: DBItem) => {
@@ -452,6 +600,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [shopSettings]
   );
 
+  // Dealer Management
+  const addDealer = useCallback(async (dealer: Dealer) => {
+    console.log("[Firebase] Adding dealer to Realtime Database", dealer);
+    try {
+      await set(ref(db, `dealers/${dealer.id}`), dealer);
+      console.log("[Firebase] Dealer saved successfully at path:", `dealers/${dealer.id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to add dealer", error);
+      throw error;
+    }
+  }, []);
+
+  const updateDealer = useCallback(async (id: string, updates: Partial<Dealer>) => {
+    console.log("[Firebase] Updating dealer in Realtime Database", { id, updates });
+    try {
+      await updateRef(ref(db, `dealers/${id}`), { ...updates, updatedAt: new Date().toISOString() });
+      console.log("[Firebase] Dealer updated successfully at path:", `dealers/${id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to update dealer", error);
+      throw error;
+    }
+  }, []);
+
+  const deleteDealer = useCallback(async (id: string) => {
+    console.log("[Firebase] Deleting dealer from Realtime Database", { id });
+    try {
+      await remove(ref(db, `dealers/${id}`));
+      console.log("[Firebase] Dealer deleted successfully at path:", `dealers/${id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to delete dealer", error);
+      throw error;
+    }
+  }, []);
+
+
+  // Dealer Purchase Management
+  const addDealerPurchase = useCallback(async (purchase: DealerPurchase) => {
+    console.log("[Firebase] Adding dealer purchase to Realtime Database", purchase);
+    try {
+      // Save purchase
+      await set(ref(db, `dealerPurchases/${purchase.id}`), purchase);
+
+      // Update inventory for each item
+      for (const item of purchase.items) {
+        await updateInventoryStock(
+          item.itemId,
+          item.variantId,
+          item.quantity,
+          'purchase',
+          purchase.id
+        );
+      }
+
+      console.log("[Firebase] Dealer purchase saved successfully at path:", `dealerPurchases/${purchase.id}`);
+    } catch (error) {
+      console.error("[Firebase] Failed to add dealer purchase", error);
+      throw error;
+    }
+  }, [updateInventoryStock]);
+
   const value: AppContextType = {
     items: appItems,
     addItem,
@@ -476,6 +684,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addAlteration,
     updateAlteration,
     deleteAlteration,
+    dealers: appDealers,
+    addDealer,
+    updateDealer,
+    deleteDealer,
+    inventory: appInventory,
+    getInventoryByItem,
+    updateInventoryStock,
+    getLowStockItems,
+    dealerPurchases: appDealerPurchases,
+    addDealerPurchase,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

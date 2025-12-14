@@ -1,6 +1,7 @@
 import { Bill, PaymentMode, BillItem } from '@/types';
-import { Trash2, Plus, Minus } from 'lucide-react';
+import { Trash2, Plus, Minus, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
+import { useApp } from '@/contexts/AppContext';
 
 interface BillSummaryProps {
   bill: Bill;
@@ -21,6 +22,7 @@ export default function BillSummary({
   onPrint,
   onSave,
 }: BillSummaryProps) {
+  const { getInventoryByItem } = useApp();
   const [discountInput, setDiscountInput] = useState(bill.discount);
   const [discountType, setDiscountType] = useState<'fixed' | 'percentage'>(bill.discountType);
 
@@ -37,12 +39,29 @@ export default function BillSummary({
       {/* Bill Items */}
       {bill.items.length > 0 ? (
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {bill.items.map((item) => (
-	            <div key={item.variantId} className="flex items-center justify-between p-2 bg-slate-50 rounded">
-	              <div className="flex-1 min-w-0">
-	                <p className="text-sm font-medium text-slate-900 truncate">{item.itemName} ({item.size})</p>
-	                <p className="text-xs text-slate-500">₹{item.price} × {item.quantity}</p>
-	              </div>
+          {bill.items.map((item) => {
+            const inventoryItem = getInventoryByItem(item.itemId, item.variantId);
+            const availableStock = inventoryItem?.stock || 0;
+            const isLowStock = availableStock < item.quantity;
+            
+            return (
+              <div key={item.variantId} className={`flex items-center justify-between p-2 rounded ${
+                isLowStock ? 'bg-orange-50 border border-orange-200' : 'bg-slate-50'
+              }`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{item.itemName} ({item.size})</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500">₹{item.price} × {item.quantity}</p>
+                    {inventoryItem && (
+                      <span className={`text-xs flex items-center gap-1 ${
+                        isLowStock ? 'text-orange-600 font-semibold' : 'text-slate-500'
+                      }`}>
+                        {isLowStock && <AlertTriangle size={12} />}
+                        Stock: {availableStock}
+                      </span>
+                    )}
+                  </div>
+                </div>
               <div className="flex items-center gap-2 ml-2">
                 <span className="font-semibold text-slate-900 w-16 text-right">₹{item.subtotal}</span>
                 <div className="flex items-center gap-1">
@@ -71,7 +90,8 @@ export default function BillSummary({
                 )}
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       ) : (
         <div className="text-center py-8 text-slate-500">

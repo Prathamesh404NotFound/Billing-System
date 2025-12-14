@@ -8,7 +8,7 @@ import { useToast } from '@/components/Toast';
 import { DBItem, PaymentMode } from '@/types';
 
 export default function MakeBill() {
-  const { currentBill, createNewBill, getItemsByCategory, categories, addItemToBill, removeItemFromBill, updateBillItem, setDiscount, saveBill } = useApp();
+  const { currentBill, createNewBill, getItemsByCategory, categories, addItemToBill, removeItemFromBill, updateBillItem, setDiscount, saveBill, inventory, getInventoryByItem } = useApp();
   const { show } = useToast();
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || '');
   const [customerName, setCustomerName] = useState('');
@@ -53,15 +53,43 @@ export default function MakeBill() {
   };
 
   const handleConfirmSave = async () => {
+    if (!currentBill) return;
+
+    // Validate stock availability before saving
+    const stockErrors: string[] = [];
+    for (const item of currentBill.items) {
+      const inventoryItem = getInventoryByItem(item.itemId, item.variantId);
+      const availableStock = inventoryItem?.stock || 0;
+      
+      if (availableStock < item.quantity) {
+        stockErrors.push(
+          `${item.itemName} (${item.size}): Available ${availableStock}, Required ${item.quantity}`
+        );
+      }
+    }
+
+    if (stockErrors.length > 0) {
+      show(
+        `Insufficient stock:\n${stockErrors.join('\n')}`,
+        'error'
+      );
+      return;
+    }
+
     try {
       await saveBill(paymentMode, customerName || undefined);
-      show('Bill saved successfully!', 'success');
+      show('Bill saved successfully! Inventory updated.', 'success');
       setShowSaveModal(false);
       setCustomerName('');
       createNewBill();
     } catch (error) {
       console.error(error);
-      show('Failed to save bill. Please try again.', 'error');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save bill. Please try again.';
+      if (errorMessage.includes('Insufficient stock')) {
+        show(errorMessage, 'error');
+      } else {
+        show('Failed to save bill. Please try again.', 'error');
+      }
     }
   };
 

@@ -1,24 +1,67 @@
 import Layout from '@/components/Layout';
 import { useApp } from '@/contexts/AppContext';
 import { Link } from 'wouter';
-import { TrendingUp, ShoppingCart, Package, DollarSign } from 'lucide-react';
+import { TrendingUp, ShoppingCart, Package, DollarSign, Warehouse, Users, ArrowUp } from 'lucide-react';
 import { useMemo } from 'react';
 
 export default function Dashboard() {
-  const { bills, items } = useApp();
+  const { bills, items, inventory, dealerPurchases, dealers, getLowStockItems } = useApp();
 
   const stats = useMemo(() => {
     const today = new Date().toDateString();
     const todaysBills = bills.filter((b) => new Date(b.date).toDateString() === today);
     const todaysSales = todaysBills.reduce((sum, b) => sum + b.total, 0);
 
+    // Today's purchases
+    const todaysPurchases = dealerPurchases.filter(
+      (p) => new Date(p.purchaseDate).toDateString() === today
+    );
+    const todaysPurchaseValue = todaysPurchases.reduce((sum, p) => sum + p.totalValue, 0);
+
+    // This month's purchases
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthPurchases = dealerPurchases.filter(
+      (p) => new Date(p.purchaseDate) >= monthStart
+    );
+    const monthPurchaseValue = thisMonthPurchases.reduce((sum, p) => sum + p.totalValue, 0);
+
+    // Total stock value
+    const totalStockValue = inventory.reduce((sum, inv) => sum + inv.stock * inv.costPrice, 0);
+
+    // Top suppliers (dealers) by purchase value
+    const dealerStats = dealerPurchases.reduce((acc, purchase) => {
+      if (!acc[purchase.dealerId]) {
+        acc[purchase.dealerId] = { dealerId: purchase.dealerId, dealerName: purchase.dealerName, totalValue: 0 };
+      }
+      acc[purchase.dealerId].totalValue += purchase.totalValue;
+      return acc;
+    }, {} as Record<string, { dealerId: string; dealerName: string; totalValue: number }>);
+
+    const topSuppliers = Object.values(dealerStats)
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 5);
+
+    // Recently added stock (last 7 days)
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const recentStock = inventory.filter(
+      (inv) => new Date(inv.updatedAt) >= weekAgo
+    );
+
     return {
       totalBills: bills.length,
       todaysSales,
       totalItems: items.length,
       totalRevenue: bills.reduce((sum, b) => sum + b.total, 0),
+      totalStockValue,
+      todaysPurchaseValue,
+      monthPurchaseValue,
+      topSuppliers,
+      recentStockCount: recentStock.length,
+      lowStockCount: getLowStockItems(10).length,
     };
-  }, [bills, items]);
+  }, [bills, items, inventory, dealerPurchases, getLowStockItems]);
 
   const StatCard = ({ icon: Icon, label, value, color }: any) => (
     <div className={`bg-white rounded-lg border border-slate-200 p-6 hover:shadow-md transition-shadow`}>
@@ -47,7 +90,7 @@ export default function Dashboard() {
         <StatCard
           icon={TrendingUp}
           label="Today's Sales"
-          value={`₹${stats.todaysSales}`}
+          value={`₹${stats.todaysSales.toLocaleString()}`}
           color="bg-green-600"
         />
         <StatCard
@@ -59,8 +102,32 @@ export default function Dashboard() {
         <StatCard
           icon={DollarSign}
           label="Total Revenue"
-          value={`₹${stats.totalRevenue}`}
+          value={`₹${stats.totalRevenue.toLocaleString()}`}
           color="bg-orange-600"
+        />
+        <StatCard
+          icon={Warehouse}
+          label="Stock Value"
+          value={`₹${stats.totalStockValue.toLocaleString()}`}
+          color="bg-indigo-600"
+        />
+        <StatCard
+          icon={ArrowUp}
+          label="Today's Purchases"
+          value={`₹${stats.todaysPurchaseValue.toLocaleString()}`}
+          color="bg-teal-600"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Month Purchases"
+          value={`₹${stats.monthPurchaseValue.toLocaleString()}`}
+          color="bg-cyan-600"
+        />
+        <StatCard
+          icon={Package}
+          label="Low Stock Items"
+          value={stats.lowStockCount}
+          color="bg-red-600"
         />
       </div>
 
@@ -103,8 +170,65 @@ export default function Dashboard() {
             <p className="font-semibold text-rose-900">Alterations</p>
             <p className="text-sm text-rose-700">Track stitching jobs</p>
           </Link>
+          <Link
+            href="/inventory"
+            className="p-4 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors text-center"
+          >
+            <p className="font-semibold text-indigo-900">Inventory</p>
+            <p className="text-sm text-indigo-700">Stock management</p>
+          </Link>
+          <Link
+            href="/dealers"
+            className="p-4 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors text-center"
+          >
+            <p className="font-semibold text-teal-900">Dealers</p>
+            <p className="text-sm text-teal-700">Supplier management</p>
+          </Link>
+          <Link
+            href="/dealer-purchases"
+            className="p-4 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded-lg transition-colors text-center"
+          >
+            <p className="font-semibold text-cyan-900">Purchases</p>
+            <p className="text-sm text-cyan-700">Add stock entries</p>
+          </Link>
         </div>
       </div>
+
+      {/* Top Suppliers */}
+      {stats.topSuppliers.length > 0 && (
+        <div className="mt-8 bg-white rounded-lg border border-slate-200 p-6">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Top Suppliers</h2>
+          <div className="space-y-3">
+            {stats.topSuppliers.map((supplier, index) => (
+              <div
+                key={supplier.dealerId}
+                className="flex items-center justify-between p-3 border border-slate-200 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">{supplier.dealerName}</p>
+                    <p className="text-xs text-slate-500">Dealer ID: {supplier.dealerId}</p>
+                  </div>
+                </div>
+                <p className="font-bold text-indigo-600">₹{supplier.totalValue.toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recently Added Stock */}
+      {stats.recentStockCount > 0 && (
+        <div className="mt-8 bg-white rounded-lg border border-slate-200 p-6">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Recently Added Stock</h2>
+          <p className="text-slate-600">
+            {stats.recentStockCount} items updated in the last 7 days
+          </p>
+        </div>
+      )}
 
       {/* Recent Bills */}
       {bills.length > 0 && (

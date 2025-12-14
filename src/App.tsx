@@ -12,6 +12,9 @@ import ItemManagement from "./pages/ItemManagement";
 import CategoriesManagement from "./pages/CategoriesManagement";
 import Alterations from "./pages/Alterations";
 import Settings from "./pages/Settings";
+import DealersManagement from "./pages/DealersManagement";
+import Inventory from "./pages/Inventory";
+import DealerPurchaseEntry from "./pages/DealerPurchaseEntry";
 import NotFound from "./pages/NotFound";
 
 function Router() {
@@ -23,6 +26,9 @@ function Router() {
       <Route path={"/items"} component={ItemManagement} />
       <Route path={"/categories"} component={CategoriesManagement} />
       <Route path={"/alterations"} component={Alterations} />
+      <Route path={"/dealers"} component={DealersManagement} />
+      <Route path={"/inventory"} component={Inventory} />
+      <Route path={"/dealer-purchases"} component={DealerPurchaseEntry} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

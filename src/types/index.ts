@@ -86,3 +86,68 @@ export interface DashboardStats {
   totalRevenue: number;
   dailySalesData: { date: string; sales: number }[];
 }
+
+// Dealer Management
+export interface Dealer {
+  id: string;
+  dealerName: string;
+  shopName: string;
+  mobileNumber: string;
+  whatsappNumber?: string;
+  address: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Inventory Management
+export interface InventoryItem {
+  itemId: string;
+  itemName: string;
+  category: string;
+  variant: string; // variantId or size
+  variantId: string;
+  stock: number;
+  costPrice: number;
+  sellingPrice: number;
+  updatedAt: string;
+}
+
+// Stock History Log
+export interface StockHistory {
+  id: string;
+  itemId: string;
+  variantId: string;
+  itemName: string;
+  variant: string;
+  change: number; // positive for increase, negative for decrease
+  previousStock: number;
+  newStock: number;
+  reason: 'purchase' | 'sale' | 'adjustment' | 'manual';
+  referenceId?: string; // billId or purchaseId
+  timestamp: string;
+  notes?: string;
+}
+
+// Dealer Purchase
+export interface PurchaseItem {
+  itemId: string;
+  itemName: string;
+  variantId: string;
+  variant: string; // size
+  quantity: number;
+  costPrice: number;
+  subtotal: number;
+}
+
+export interface DealerPurchase {
+  id: string;
+  dealerId: string;
+  dealerName: string;
+  purchaseDate: string;
+  items: PurchaseItem[];
+  totalQuantity: number;
+  totalValue: number;
+  notes?: string;
+  createdAt: string;
+}
